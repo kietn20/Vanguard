@@ -28,7 +28,7 @@ class FactorySimulator:
 
         logging.basicConfig(
             level=config.simulator.log_level,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
         self.logger = logging.getLogger(__name__)
 
@@ -49,26 +49,27 @@ class FactorySimulator:
 
     def _create_producer(self) -> KafkaProducer:
         """
-        Create and configure kafka producer
+        Create and configure Kafka producer.
 
-        returns:
-            KafkaProducer: configured producers instance
+        Returns:
+            KafkaProducer: Configured producer instance
 
         Raises:
-            KafkaError: if connection to kafka fails
+            KafkaError: If connection to Kafka fails
         """
         try:
             producer = KafkaProducer(
                 bootstrap_servers=self.config.kafka.bootstrap_servers,
                 client_id=self.config.kafka.client_id,
-                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-
+                value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
                 # reliability settings
-                acks='all',
-                retires=3,
-                max_in_flight_requests_per_connection=1
+                acks="all",  # wait for all replicas to acknowledge
+                retries=3,  # retry up to 3 times on failure
+                max_in_flight_requests_per_connection=1,  # ensure ordering
             )
-            self.logger.info(f"Connected to Kafka at {self.config.kafka.bootstrap_servers}")
+            self.logger.info(
+                f"Connected to Kafka at {self.config.kafka.bootstrap_servers}"
+            )
             return producer
         except KafkaError as e:
             self.logger.error(f"Failed to connect to Kafka: {e}")
@@ -86,10 +87,7 @@ class FactorySimulator:
         """
         try:
             # send msg async and get a future
-            future = self.producer.send(
-                self.config.kafka.topic,
-                value=event_dict
-            )
+            future = self.producer.send(self.config.kafka.topic, value=event_dict)
 
             # block until msg is sent or timeout
             record_metadata = future.get(timeout=10)
@@ -124,7 +122,7 @@ class FactorySimulator:
             while self.running:
                 event = EventGenerator.generate_random_event()
 
-                event_dict = event.model_dumps()
+                event_dict = event.model_dump()
 
                 success = self._publish_event(event_dict)
                 if success:
@@ -157,7 +155,6 @@ class FactorySimulator:
             self.logger.info("Kafka producer closed")
 
         self.logger.info("Simulator stopped")
-
 
 
 def main():
