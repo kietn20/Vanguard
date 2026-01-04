@@ -1,0 +1,28 @@
+# Spring Boot Application Configuration
+spring:
+  application:
+    name: maintenance-service
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    topic: factory_events
+    consumer:
+      group-id: maintenance-service-group
+      # Consumer will start from earliest message if no offset exists
+      auto-offset-reset: earliest
+      # Manual commit for better control
+      enable-auto-commit: false
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.vanguard.maintenance: DEBUG
+    org.springframework.kafka: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
+
+# Server Configuration
+server:
+  port: 8081
