@@ -29,3 +29,18 @@ target/
 
 # Docker
 docker-compose.override.yml
+
+# Eclipse metadata files
+.classpath
+.project
+.settings/
+
+# Maven/Build output (common in Java projects)
+target/
+bin/
+
+# IDE specific
+.apt_generated
+.factorypath
+.springBeans
+.sts4-cache
