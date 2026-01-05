@@ -11,6 +11,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 
 import com.vanguard.maintenance.model.FactoryEvent;
@@ -43,9 +46,13 @@ public class KafkaConsumerConfig {
     // Consumer group (allows load balancing across multiple instances)
     config.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
 
-    // Deserializers (convert bytes back to Java objects)
-    config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-    config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+    // Use ErrorHandlingDeserializer to handle deserialization errors gracefully
+    config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+    config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+    
+    // Configure delegate deserializers
+    config.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS, StringDeserializer.class);
+    config.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class);
 
     // Tell Jackson to trust FactoryEvent class
     config.put(JsonDeserializer.TRUSTED_PACKAGES, "com.vanguard.maintenance.model");
@@ -58,8 +65,8 @@ public class KafkaConsumerConfig {
 
     return new DefaultKafkaConsumerFactory<>(
         config,
-        new StringDeserializer(),
-        new JsonDeserializer<>(FactoryEvent.class, false) // false = don't use type headers
+        new ErrorHandlingDeserializer<>(new StringDeserializer()),
+        new ErrorHandlingDeserializer<>(new JsonDeserializer<>(FactoryEvent.class, false))
     );
   }
 
@@ -78,7 +85,22 @@ public class KafkaConsumerConfig {
 
     // Number of concurrent consumer threads (start with 1 for simplicity)
     factory.setConcurrency(1);
+    
+    // Set error handler to skip malformed messages
+    factory.setCommonErrorHandler(errorHandler());
 
     return factory;
+  }
+  
+  /**
+   * Error handler for deserialization issues.
+   * This will skip malformed messages instead of causing infinite loops.
+   */
+  @Bean
+  public CommonErrorHandler errorHandler() {
+    DefaultErrorHandler errorHandler = new DefaultErrorHandler();
+    // Skip malformed messages and continue
+    errorHandler.setSeekAfterError(false);
+    return errorHandler;
   }
 }
