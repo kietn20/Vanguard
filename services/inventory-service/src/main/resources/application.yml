@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: inventory-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vanguard
+    username: vanguard
+    password: vanguard_dev_password
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # ddl-auto options:
+      # - create: Drop and recreate tables every startup (DEVELOPMENT ONLY)
+      # - update: Update schema without dropping (safe for dev)
+      # - validate: Only check if schema matches (production)
+      # - none: Do nothing
+      ddl-auto: update
+    show-sql: true  # Log SQL statements (great for learning!)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true  # Pretty-print SQL in logs
+
+  sql:
+    init:
+      mode: always  # Run initialization scripts
+      continue-on-error: false  # Stop if SQL fails
+
+  # Kafka Configuration
+  kafka:
+    bootstrap-servers: localhost:9092
+    topic: factory_events
+    consumer:
+      group-id: inventory-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: com.vanguard.inventory.model
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.vanguard.inventory: DEBUG
+    org.springframework.kafka: INFO
+    org.hibernate.SQL: DEBUG  # Show SQL statements
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE  # Show SQL parameter values
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
+
+# Server Configuration
+server:
+  port: 8082  # Different port from maintenance-service (8081)
