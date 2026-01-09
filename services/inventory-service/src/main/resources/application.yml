@@ -16,7 +16,7 @@ spring:
       # - validate: Only check if schema matches (production)
       # - none: Do nothing
       ddl-auto: update
-    show-sql: true  # Log SQL statements (great for learning!)
+    show-sql: false  # Log SQL statements
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -35,10 +35,6 @@ spring:
       group-id: inventory-service-group
       auto-offset-reset: earliest
       enable-auto-commit: false
-      properties:
-        spring.json.trusted.packages: com.vanguard.inventory.model
-        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
-        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
 
 # Logging Configuration
 logging:
