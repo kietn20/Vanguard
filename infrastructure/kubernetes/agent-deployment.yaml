@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-agents
+  namespace: vanguard
+  labels:
+    app: ai-agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-agents
+  template:
+    metadata:
+      labels:
+        app: ai-agents
+    spec:
+      containers:
+      - name: ai-agents
+        image: vanguard/ai-agents:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: vanguard-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: KAFKA_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: vanguard-config
+              key: KAFKA_TOPIC
+        - name: INVENTORY_API_BASE
+          value: "http://inventory-service:8082/api/inventory"
+        - name: GUARDRAIL_API_BASE
+          value: "http://guardrail-service:8083/api/guardrail"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
