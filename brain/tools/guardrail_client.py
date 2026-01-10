@@ -6,7 +6,7 @@ AI agents must call this BEFORE executing inventory actions.
 
 import httpx
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 GUARDRAIL_API_BASE = "http://localhost:8083/api/guardrail"
@@ -15,12 +15,12 @@ GUARDRAIL_API_BASE = "http://localhost:8083/api/guardrail"
 class GuardrailRequest(BaseModel):
     """Request to validate an action."""
 
-    action_type: str
-    part_number: str
+    action_type: str = Field(serialization_alias="actionType")
+    part_number: str = Field(serialization_alias="partNumber")
     quantity: int
     reason: str
-    event_id: Optional[str] = None
-    agent_id: str = "inventory-agent"
+    event_id: Optional[str] = Field(default=None, serialization_alias="eventId")
+    agent_id: str = Field(default="inventory-agent", serialization_alias="agentId")
 
 
 class GuardrailResponse(BaseModel):
@@ -72,7 +72,7 @@ def validate_action(
             event_id=event_id,
         )
 
-        response = httpx.post(f"{GUARDRAIL_API_BASE}/validate", json=request.model_dump(), timeout=5.0)
+        response = httpx.post(f"{GUARDRAIL_API_BASE}/validate", json=request.model_dump(by_alias=True), timeout=5.0)
 
         # accept both 200 (approved) and 202 (requires approval)
         if response.status_code in [200, 202]:
