@@ -9,7 +9,7 @@ spring:
   #   username: postgres
   #   password: password
   #   driver-class-name: org.postgresql.Driver
-  
+
   # jpa:
   #   hibernate:
   #     ddl-auto: update
@@ -46,3 +46,16 @@ logging:
 # Server Configuration
 server:
   port: 8081
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
