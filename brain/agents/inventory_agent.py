@@ -145,6 +145,12 @@ class InventoryAgent:
 
         except InventoryToolError as e:
             logger.error(f"[{self.name}] Error checking low stock: {e}")
+            state["actions_taken"].append(
+                {
+                    "action": "check_low_stock",
+                    "error": str(e),
+                }
+            )
 
     def _generate_decision(self, state: AgentState) -> None:
         """
