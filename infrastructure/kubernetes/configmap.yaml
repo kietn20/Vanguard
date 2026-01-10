@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vanguard-config
+  namespace: vanguard
+data:
+  # Kafka Configuration
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
+  KAFKA_TOPIC: "factory_events"
+
+  # PostgreSQL Configuration
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "vanguard"
+  POSTGRES_USER: "vanguard"
+
+  # Service URLs
+  INVENTORY_SERVICE_URL: "http://inventory-service:8082"
+  GUARDRAIL_SERVICE_URL: "http://guardrail-service:8083"
+
+  # Application Configuration
+  LOG_LEVEL: "INFO"
+  EVENT_INTERVAL_SECONDS: "10"
