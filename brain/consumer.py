@@ -129,9 +129,14 @@ class AgentKafkaConsumer:
 
 
 
+import os
+
 def main():
     """Entry point."""
-    consumer = AgentKafkaConsumer()
+    bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+    topic = os.getenv("KAFKA_TOPIC", "factory_events")
+    
+    consumer = AgentKafkaConsumer(bootstrap_servers=bootstrap_servers, topic=topic)
     consumer.start()
 
 

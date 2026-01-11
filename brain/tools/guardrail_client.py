@@ -4,12 +4,13 @@ Client for calling the Guardrail Service.
 AI agents must call this BEFORE executing inventory actions.
 """
 
+import os
 import httpx
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
-GUARDRAIL_API_BASE = "http://localhost:8083/api/guardrail"
+GUARDRAIL_API_BASE = os.getenv("GUARDRAIL_API_BASE", "http://localhost:8083/api/guardrail")
 
 
 class GuardrailRequest(BaseModel):

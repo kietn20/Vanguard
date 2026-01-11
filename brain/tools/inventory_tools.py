@@ -4,12 +4,13 @@ Tools for interacting with the Inventory Service REST API.
 These tools allow AI agents to query and modify inventory data.
 """
 
+import os
 import httpx
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 
-INVENTORY_API_BASE = "http://localhost:8082/api/inventory"
+INVENTORY_API_BASE = os.getenv("INVENTORY_API_BASE", "http://localhost:8082/api/inventory")
 
 
 class InventoryToolError(Exception):
