@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: vanguard
+data:
+  inventory-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Vanguard Inventory Service",
+        "tags": ["vanguard", "inventory", "java"],
+        "timezone": "browser",
+        "refresh": "10s",
+        "time": {
+          "from": "now-30m",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "HTTP Request Rate",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "rate(http_server_requests_seconds_count{service=\"inventory-service\"}[5m])",
+                "legendFormat": "{{method}} {{uri}}"
+              }
+            ],
+            "yaxes": [
+              {"format": "reqps", "label": "Requests/sec"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 2,
+            "title": "HTTP Request Duration (p95)",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{service=\"inventory-service\"}[5m])) by (le, uri))",
+                "legendFormat": "{{uri}}"
+              }
+            ],
+            "yaxes": [
+              {"format": "s", "label": "Duration"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 3,
+            "title": "JVM Memory Usage",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "targets": [
+              {
+                "expr": "jvm_memory_used_bytes{service=\"inventory-service\", area=\"heap\"}",
+                "legendFormat": "Heap Used"
+              },
+              {
+                "expr": "jvm_memory_max_bytes{service=\"inventory-service\", area=\"heap\"}",
+                "legendFormat": "Heap Max"
+              }
+            ],
+            "yaxes": [
+              {"format": "bytes", "label": "Memory"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Active Threads",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+            "targets": [
+              {
+                "expr": "executor_active_threads{service=\"inventory-service\"}"
+              }
+            ],
+            "options": {
+              "colorMode": "value",
+              "graphMode": "area",
+              "textMode": "value_and_name"
+            }
+          },
+          {
+            "id": 5,
+            "title": "Uptime",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+            "targets": [
+              {
+                "expr": "process_uptime_seconds{service=\"inventory-service\"}"
+              }
+            ],
+            "options": {
+              "unit": "s",
+              "colorMode": "value"
+            }
+          },
+          {
+            "id": 6,
+            "title": "HTTP Errors (5xx)",
+            "type": "stat",
+            "gridPos": {"h": 4, "w": 12, "x": 12, "y": 12},
+            "targets": [
+              {
+                "expr": "sum(rate(http_server_requests_seconds_count{service=\"inventory-service\", status=~\"5..\"}[5m]))"
+              }
+            ],
+            "options": {
+              "colorMode": "background",
+              "graphMode": "area",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 0.1, "color": "yellow"},
+                  {"value": 1, "color": "red"}
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
