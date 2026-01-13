@@ -131,7 +131,7 @@ def main():
 
     # start metrics HTTP server
     start_http_server(8000)
-    logger.info("Metrics server started on port 8000")
+    logger.info("Vanguard Metrics server started on port 8000")
 
     consumer = AgentKafkaConsumer(bootstrap_servers=bootstrap_servers, topic=topic)
     consumer.start()
