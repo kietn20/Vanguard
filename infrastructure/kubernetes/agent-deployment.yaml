@@ -34,6 +34,11 @@ spec:
           value: "http://inventory-service:8082/api/inventory"
         - name: GUARDRAIL_API_BASE
           value: "http://guardrail-service:8083/api/guardrail"
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vanguard-secrets
+              key: GEMINI_API_KEY
         resources:
           requests:
             memory: "512Mi"
