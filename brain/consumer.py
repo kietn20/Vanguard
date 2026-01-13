@@ -12,6 +12,7 @@ import json
 import logging
 import signal
 import sys
+from prometheus_client import start_http_server, Counter
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from agents.workflow import AgentWorkflow
@@ -38,6 +39,10 @@ class AgentKafkaConsumer:
         self.consumer = None
         self.workflow = AgentWorkflow()
         self.running = False
+        
+        # Metrics
+        self.events_processed = Counter('ai_agent_events_processed_total', 'Total number of events processed by AI agents')
+        self.processing_errors = Counter('ai_agent_processing_errors_total', 'Total number of processing errors')
 
         # handle shutdown signals
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -54,6 +59,10 @@ class AgentKafkaConsumer:
 
     def start(self):
         """Start consuming events."""
+        # Start Prometheus metrics server
+        logger.info("Starting Prometheus metrics server on port 8000")
+        start_http_server(8000)
+
         logger.info("=" * 60)
         logger.info("VANGUARD AI AGENT SYSTEM STARTING")
         logger.info("=" * 60)
@@ -87,6 +96,7 @@ class AgentKafkaConsumer:
 
                     # process through agent workflow
                     state = self.workflow.process_event(event)
+                    self.events_processed.inc()
 
 
 
@@ -109,6 +119,7 @@ class AgentKafkaConsumer:
 
                 except Exception as e:
                     logger.error(f"Error processing event: {e}", exc_info=True)
+                    self.processing_errors.inc()
 
         except KafkaError as e:
             logger.error(f"Kafka error: {e}")

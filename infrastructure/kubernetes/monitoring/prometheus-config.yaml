@@ -44,12 +44,12 @@ data:
             target_label: namespace
 
       # Job 2: Scrape Kafka metrics (using JMX exporter)
-      - job_name: 'kafka'
-        static_configs:
-          - targets: ['kafka-0.kafka-service.vanguard.svc.cluster.local:9999']
-        relabel_configs:
-          - source_labels: [__address__]
-            target_label: instance
+      # - job_name: 'kafka'
+      #   static_configs:
+      #     - targets: ['kafka-0.kafka-service.vanguard.svc.cluster.local:9999']
+      #   relabel_configs:
+      #     - source_labels: [__address__]
+      #       target_label: instance
 
       # Job 3: Scrape Python AI agents (custom endpoint)
       - job_name: 'ai-agents'

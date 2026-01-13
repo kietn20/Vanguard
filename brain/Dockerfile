@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir poetry==2.2.1
 WORKDIR /app
 
 # Copy poetry files
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml ./
 
 # Install dependencies
 RUN poetry config virtualenvs.create false && \
