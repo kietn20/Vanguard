@@ -5,6 +5,10 @@ metadata:
   namespace: vanguard
   labels:
     app: inventory-service
+  annotations:
+    prometheus.io/scrape: "true"                 # Enable scraping
+    prometheus.io/port: "8082"                   # Metrics port
+    prometheus.io/path: "/actuator/prometheus"   # Metrics endpoint
 spec:
   type: ClusterIP
   selector:

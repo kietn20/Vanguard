@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: vanguard
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s      # How often to collect metrics
+      evaluation_interval: 15s   # How often to evaluate alert rules
+
+    # Scrape configuration for Kubernetes services
+    scrape_configs:
+      # Job 1: Scrape Spring Boot services
+      - job_name: 'kubernetes-services'
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - vanguard
+        relabel_configs:
+          # Only scrape services with prometheus.io/scrape annotation
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          # Use custom port if specified
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+          # Use custom path if specified (default: /actuator/prometheus)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Add service name as label
+          - source_labels: [__meta_kubernetes_service_name]
+            action: replace
+            target_label: service
+          # Add namespace as label
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+
+      # Job 2: Scrape Kafka metrics (using JMX exporter)
+      - job_name: 'kafka'
+        static_configs:
+          - targets: ['kafka-0.kafka-service.vanguard.svc.cluster.local:9999']
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: instance
+
+      # Job 3: Scrape Python AI agents (custom endpoint)
+      - job_name: 'ai-agents'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - vanguard
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: ai-agents
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:8000
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
