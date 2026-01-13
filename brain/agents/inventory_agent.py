@@ -1,12 +1,5 @@
 """
 Inventory Agent - Handles all inventory-related decisions.
-
-This agent:
-1. Checks if required parts are available
-2. Analyzes low stock situations
-3. Makes recommendations for reordering
-4. Validates actions through guardrail service (SAFETY)
-5. Can reserve parts for repairs (with approval)
 """
 
 import logging
@@ -21,6 +14,16 @@ from tools.inventory_tools import (
 )
 from tools.guardrail_client import validate_action, GuardrailError
 
+# ===== ADD METRICS IMPORTS =====
+from metrics.agent_metrics import (
+    decisions_made_total,
+    actions_taken_total,
+    guardrail_validations_total,
+    low_stock_parts,
+    parts_awaiting_approval,
+    track_decision_time,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,31 +36,21 @@ class InventoryAgent:
         """Initialize the inventory agent."""
         self.name = "Inventory Agent"
 
+    @track_decision_time("inventory-agent")
     def process(self, state: AgentState) -> AgentState:
         """
         Process the event and take inventory-related actions.
-
-        Args:
-            state: Current agent state
-
-        Returns:
-            Updated state with inventory analysis
         """
         logger.info(f"[{self.name}] Processing event: {state['event_type']}")
 
-        # initialize tracking
         state["parts_available"] = {}
         state["recommended_actions"] = []
         state["actions_taken"] = []
 
-        # check if specific parts are required
         if state.get("required_parts"):
             self._check_required_parts(state)
 
-        # check overall low stock situation
         self._check_low_stock_parts(state)
-
-        # generate final decision
         self._generate_decision(state)
 
         logger.info(f"[{self.name}] Processing complete")
@@ -65,9 +58,7 @@ class InventoryAgent:
         return state
 
     def _check_required_parts(self, state: AgentState) -> None:
-        """
-        Check availability of required parts
-        """
+        """Check availability of required parts"""
         required_parts = state.get("required_parts", [])
 
         logger.info(f"[{self.name}] Checking {len(required_parts)} required parts")
@@ -89,7 +80,6 @@ class InventoryAgent:
                             f"Reorder {part.name} - stock is below minimum"
                         )
 
-                    # attempt to reserve part with guardrail validation
                     if state["severity"] in ["CRITICAL", "HIGH"]:
                         self._attempt_reserve_part(state, part_number, part.name)
                 else:
@@ -99,7 +89,6 @@ class InventoryAgent:
                     )
                     state["should_escalate"] = True
 
-                # log the action
                 state["actions_taken"].append(
                     {
                         "action": "check_availability",
@@ -108,6 +97,11 @@ class InventoryAgent:
                         "low_stock": part.low_stock,
                     }
                 )
+
+                # ===== TRACK ACTION METRIC =====
+                actions_taken_total.labels(
+                    action_type="check_availability", result="success"
+                ).inc()
 
             except InventoryToolError as e:
                 logger.error(f"  ❌ Error checking {part_number}: {e}")
@@ -120,20 +114,24 @@ class InventoryAgent:
                     }
                 )
 
-    def _attempt_reserve_part(self, state: AgentState, part_number: str, part_name: str) -> None:
-        """
-        Attempt to reserve a part for critical repairs
+                # ===== TRACK FAILED ACTION =====
+                actions_taken_total.labels(
+                    action_type="check_availability", result="failed"
+                ).inc()
 
-        This validates the action through the guardrail service first
-        """
+    def _attempt_reserve_part(
+        self, state: AgentState, part_number: str, part_name: str
+    ) -> None:
+        """Attempt to reserve a part for critical repairs"""
         try:
             event_id = state.get("event_id", "")
             machine_id = state.get("machine_id", "")
-
             reason = f"Reserved for {machine_id} repair (Event: {state['event_type']})"
-            logger.info(f"   Attempting to reserve {part_name} with guardrail validation...")
 
-            # step 1: Validate with guardrail service
+            logger.info(
+                f"   Attempting to reserve {part_name} with guardrail validation..."
+            )
+
             validation = validate_action(
                 action_type="REMOVE",
                 part_number=part_number,
@@ -142,11 +140,14 @@ class InventoryAgent:
                 event_id=event_id,
             )
 
-            # step 2: Handle validation result
+            # ===== TRACK GUARDRAIL DECISION =====
             if validation.approved:
+                guardrail_validations_total.labels(
+                    action_type="REMOVE", result="approved"
+                ).inc()
+
                 logger.info(f"   Guardrail APPROVED reservation of {part_name}")
 
-                # Actually reserve the part
                 transaction = remove_stock(
                     part_number=part_number,
                     quantity=1,
@@ -154,9 +155,7 @@ class InventoryAgent:
                     event_id=event_id,
                 )
 
-                logger.info(
-                    f"  ✅ Successfully reserved {part_name} (Transaction ID: {transaction.id})"
-                )
+                logger.info(f"  ✅ Successfully reserved {part_name}")
 
                 state["actions_taken"].append(
                     {
@@ -168,14 +167,27 @@ class InventoryAgent:
                     }
                 )
 
+                # ===== TRACK SUCCESSFUL RESERVATION =====
+                actions_taken_total.labels(
+                    action_type="reserve_part", result="success"
+                ).inc()
+
             elif validation.requires_human_approval:
-                logger.warning(f"  👤 Guardrail requires HUMAN APPROVAL for {part_name}")
+                guardrail_validations_total.labels(
+                    action_type="REMOVE", result="requires_approval"
+                ).inc()
+
+                logger.warning(
+                    f"  👤 Guardrail requires HUMAN APPROVAL for {part_name}"
+                )
                 logger.warning(f"     Reason: {validation.decision}")
 
                 state["human_approval_needed"] = True
                 state["should_escalate"] = True
 
-                state["recommended_actions"].append(f"Human approval required to reserve {part_name}: {validation.decision}")
+                state["recommended_actions"].append(
+                    f"Human approval required to reserve {part_name}: {validation.decision}"
+                )
 
                 state["actions_taken"].append(
                     {
@@ -187,10 +199,15 @@ class InventoryAgent:
                     }
                 )
 
-            else:
-                logger.error(f"  ❌ Unexpected validation state for {part_name}")
+                # ===== INCREMENT APPROVAL COUNTER =====
+                parts_awaiting_approval.inc()
 
         except GuardrailError as e:
+            # ===== TRACK REJECTION =====
+            guardrail_validations_total.labels(
+                action_type="REMOVE", result="rejected"
+            ).inc()
+
             logger.error(f"  ❌ Guardrail REJECTED reservation of {part_name}")
             logger.error(f"     Reason: {e}")
 
@@ -203,32 +220,28 @@ class InventoryAgent:
                 }
             )
 
-        except InventoryToolError as e:
-            logger.error(f"  ❌ Failed to reserve {part_name}: {e}")
-
-            state["actions_taken"].append(
-                {
-                    "action": "reserve_part",
-                    "part": part_number,
-                    "result": "Failed to execute",
-                    "error": str(e),
-                }
-            )
+            actions_taken_total.labels(
+                action_type="reserve_part", result="failed"
+            ).inc()
 
     def _check_low_stock_parts(self, state: AgentState) -> None:
-        """
-        Check for any low stock parts in the system.
-        """
+        """Check for any low stock parts in the system."""
         try:
-            low_stock_parts = get_low_stock_parts()
+            low_stock_parts_list = get_low_stock_parts()
 
-            if low_stock_parts:
-                logger.warning(f"[{self.name}] Found {len(low_stock_parts)} low stock parts")
+            # ===== UPDATE GAUGE =====
+            low_stock_parts.set(len(low_stock_parts_list))
 
-                for part in low_stock_parts:
-                    logger.warning(f"  ⚠️  {part.name}: {part.quantity}/{part.minimum_quantity} units")
+            if low_stock_parts_list:
+                logger.warning(
+                    f"[{self.name}] Found {len(low_stock_parts_list)} low stock parts"
+                )
 
-                    # calculate reorder quantity (3x minimum)
+                for part in low_stock_parts_list:
+                    logger.warning(
+                        f"  ⚠️  {part.name}: {part.quantity}/{part.minimum_quantity} units"
+                    )
+
                     reorder_qty = part.minimum_quantity * 3
 
                     state["recommended_actions"].append(
@@ -239,7 +252,7 @@ class InventoryAgent:
                 state["actions_taken"].append(
                     {
                         "action": "check_low_stock",
-                        "result": f"Found {len(low_stock_parts)} parts below minimum",
+                        "result": f"Found {len(low_stock_parts_list)} parts below minimum",
                     }
                 )
             else:
@@ -255,23 +268,24 @@ class InventoryAgent:
             logger.error(f"[{self.name}] Error checking low stock: {e}")
 
     def _generate_decision(self, state: AgentState) -> None:
-        """
-        Generate final decision based on analysis.
-        """
+        """Generate final decision based on analysis."""
         parts_available = state.get("parts_available", {})
         recommended_actions = state.get("recommended_actions", [])
 
-        # check if all required parts are available
+        # ===== TRACK DECISION =====
         if parts_available:
             all_available = all(parts_available.values())
 
             if all_available:
+                decisions_made_total.labels(
+                    agent="inventory-agent", decision_type="approve"
+                ).inc()
+
                 state["final_decision"] = (
                     "✅ All required parts are in stock. "
                     "Maintenance/repair can proceed as scheduled."
                 )
 
-                # check if any parts were reserved
                 reserved = any(
                     action.get("action") == "reserve_part"
                     and action.get("result") == "Reserved 1 unit"
@@ -281,19 +295,42 @@ class InventoryAgent:
                 if reserved:
                     state["final_decision"] += " Parts have been reserved."
 
-                state["human_approval_needed"] = state.get("human_approval_needed", False)
+                state["human_approval_needed"] = state.get(
+                    "human_approval_needed", False
+                )
             else:
-                missing_parts = [part for part, available in parts_available.items() if not available]
-                state["final_decision"] = (f"❌ Critical parts missing: {', '.join(missing_parts)}. "f"Cannot proceed with maintenance/repair until parts arrive.")
+                decisions_made_total.labels(
+                    agent="inventory-agent", decision_type="escalate"
+                ).inc()
+
+                missing_parts = [
+                    part for part, available in parts_available.items() if not available
+                ]
+                state["final_decision"] = (
+                    f"❌ Critical parts missing: {', '.join(missing_parts)}. "
+                    f"Cannot proceed with maintenance/repair until parts arrive."
+                )
                 state["human_approval_needed"] = True
                 state["should_escalate"] = True
         else:
-            # No specific parts required, general inventory check
             if recommended_actions:
-                state["final_decision"] = (f"!!! {len(recommended_actions)} inventory action(s) recommended. "f"Review reorder suggestions.")
+                decisions_made_total.labels(
+                    agent="inventory-agent", decision_type="recommend"
+                ).inc()
+
+                state["final_decision"] = (
+                    f"⚠️ {len(recommended_actions)} inventory action(s) recommended. "
+                    f"Review reorder suggestions."
+                )
                 state["human_approval_needed"] = len(recommended_actions) > 3
             else:
-                state["final_decision"] = ("Inventory levels are healthy. No action needed.")
+                decisions_made_total.labels(
+                    agent="inventory-agent", decision_type="approve"
+                ).inc()
+
+                state["final_decision"] = (
+                    "✅ Inventory levels are healthy. No action needed."
+                )
                 state["human_approval_needed"] = False
 
         logger.info(f"[{self.name}] Decision: {state['final_decision']}")
