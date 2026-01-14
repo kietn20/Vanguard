@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape Spring Boot services
+  - job_name: 'inventory-service'
+    static_configs:
+      - targets: ['inventory-service:8082']
+    metrics_path: '/actuator/prometheus'
+
+  - job_name: 'guardrail-service'
+    static_configs:
+      - targets: ['guardrail-service:8083']
+    metrics_path: '/actuator/prometheus'
+
+  - job_name: 'maintenance-service'
+    static_configs:
+      - targets: ['maintenance-service:8081']
+    metrics_path: '/actuator/prometheus'
+
+  # Scrape AI agents
+  - job_name: 'ai-agents'
+    static_configs:
+      - targets: ['ai-agents:8000']
+    metrics_path: '/metrics'
