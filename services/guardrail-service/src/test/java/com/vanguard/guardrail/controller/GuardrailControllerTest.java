@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vanguard.guardrail.controller.GuardrailController;
 import com.vanguard.guardrail.dto.ActionRequest;
 import com.vanguard.guardrail.dto.ValidationResult;
+import com.vanguard.guardrail.service.AuditService;
 import com.vanguard.guardrail.service.GuardrailValidator;
 
 /**
@@ -36,6 +37,9 @@ class GuardrailControllerTest {
 
     @MockBean
     private GuardrailValidator validator;
+
+    @MockBean
+    private AuditService auditService;
 
     @Test
     void validateAction_WhenApproved_Returns200() throws Exception {

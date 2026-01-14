@@ -34,9 +34,63 @@ jobs:
   test-python:
     name: Test Python Agents
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vanguard
+          POSTGRES_PASSWORD: vanguard_dev_password
+          POSTGRES_DB: vanguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      kafka:
+        image: apache/kafka:latest
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: 'broker,controller'
+          KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
+          KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9092'
+          KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+          KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093'
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
     steps:
       - uses: actions/checkout@v3
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and Start Java Services
+        run: |
+          # Build services skipping tests for speed
+          cd services/inventory-service
+          mvn clean package -DskipTests
+          java -jar target/*.jar > inventory.log 2>&1 &
+          
+          cd ../../services/guardrail-service
+          mvn clean package -DskipTests
+          java -jar target/*.jar > guardrail.log 2>&1 &
+          
+          # Wait for services to be ready
+          echo "Waiting for services to start..."
+          timeout 60 bash -c 'until curl -s http://localhost:8082/actuator/health; do sleep 2; done'
+          timeout 60 bash -c 'until curl -s http://localhost:8083/api/guardrail/health; do sleep 2; done'
+          echo "Services are up!"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v4
@@ -64,9 +118,20 @@ jobs:
       - name: Run tests
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          INVENTORY_API_BASE: http://localhost:8082/api/inventory
+          GUARDRAIL_API_BASE: http://localhost:8083/api/guardrail
         run: |
           cd brain
           poetry run pytest tests/
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: service-logs
+          path: |
+            services/inventory-service/inventory.log
+            services/guardrail-service/guardrail.log
 
   build-images:
     name: Build Docker Images
