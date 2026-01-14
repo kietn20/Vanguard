@@ -35,43 +35,6 @@ Vanguard is a production-grade system that combines **AI agents** (Python/LangGr
                             └─────────────────┘
 ```
 
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker Desktop
-- Minikube or Kubernetes cluster
-- Python 3.12+
-- Java 21+
-- kubectl
-
-### One-Command Deployment
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/vanguard.git
-cd vanguard
-
-# Start Minikube
-minikube start --memory=8192 --cpus=4
-
-# Build and deploy
-./infrastructure/scripts/local-deploy.sh
-```
-
-### Verify Deployment
-```bash
-# Check all pods are running
-kubectl get pods -n vanguard
-
-# View AI agent logs
-kubectl logs -f deployment/ai-agents -n vanguard
-
-# Access Grafana dashboards
-kubectl port-forward -n vanguard svc/grafana-service 3000:3000
-# Open http://localhost:3000 (admin/vanguard2024)
-```
-
-
 ## 📊 System Components
 
 ### 1. Factory Simulator (Python)
@@ -176,6 +139,55 @@ threshold by 31°C, which indicates a high risk of equipment damage or fire.
 
 **Access:** `kubectl port-forward -n vanguard svc/grafana-service 3000:3000`
 
+## Screenshots
+
+### 1. LLM Agent Workflow Logs
+![Agent Workflow Logs](docs/images/agent-workflow.png)
+*Terminal output showcasing the Supervisor Agent's reasoning process and specialized agent handoffs.*
+
+### 2. AI Agent Performance Dashboard
+![AI Agent Performance](docs/images/agent-performance.png)
+*Real-time tracking of agent decisions, event processing latency, and action success rates.*
+
+### 2. Inventory Service Health
+![Inventory Service Health](docs/images/inventory-health.png)
+*Monitoring JVM metrics, HTTP request rates, and service uptime for the core inventory backend.*
+
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker Desktop
+- Minikube or Kubernetes cluster
+- Python 3.12+
+- Java 21+
+- kubectl
+
+### One-Command Deployment
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/vanguard.git
+cd vanguard
+
+# Start Minikube
+minikube start --memory=8192 --cpus=4
+
+# Build and deploy
+./infrastructure/scripts/local-deploy.sh
+```
+
+### Verify Deployment
+```bash
+# Check all pods are running
+kubectl get pods -n vanguard
+
+# View AI agent logs
+kubectl logs -f deployment/ai-agents -n vanguard
+
+# Access Grafana dashboards
+kubectl port-forward -n vanguard svc/grafana-service 3000:3000
+# Open http://localhost:3000 (admin/vanguard2024)
+```
 
 ## Testing
 
@@ -282,12 +294,12 @@ SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-service:9092
 
 ## Future Enhancements
 
-- [ ] Maintenance Scheduling Agent
-- [ ] Procurement Agent (auto-ordering)
-- [ ] Distributed tracing with OpenTelemetry
-- [ ] Advanced alerting with AlertManager
-- [ ] AWS EKS production deployment
-- [ ] Helm charts for easy installation
+- Maintenance Scheduling Agent
+- Procurement Agent (auto-ordering)
+- Distributed tracing with OpenTelemetry
+- Advanced alerting with AlertManager
+- AWS EKS production deployment
+- Helm charts for easy installation
 
 ---
 
@@ -298,7 +310,7 @@ SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka-service:9092
 - [Agent Architecture](docs/agent-architecture.md)
 - [Learnings](docs/phase2-learnings.md)
 - [Safety Architecture](docs/phase4-safety-architecture.md)
-
+- [Deployment Guide](docs/deployment-guide.md)
 
 ## License
 
