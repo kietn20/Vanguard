@@ -149,7 +149,7 @@ threshold by 31°C, which indicates a high risk of equipment damage or fire.
 ![AI Agent Performance](docs/images/agent-performance.png)
 *Real-time tracking of agent decisions, event processing latency, and action success rates.*
 
-### 2. Inventory Service Health
+### 3. Inventory Service Health
 ![Inventory Service Health](docs/images/inventory-health.png)
 *Monitoring JVM metrics, HTTP request rates, and service uptime for the core inventory backend.*
 
