@@ -8,10 +8,12 @@ This module orchestrates the multi-agent system:
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
+
+from agents.inventory_agent import InventoryAgent
+from agents.inventory_agent_mcp import InventoryAgentMCP
 from agents.state import AgentState, EventType, Severity
 from agents.supervisor import SupervisorAgent
-from agents.inventory_agent import InventoryAgent
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +23,22 @@ class AgentWorkflow:
     Coordinates the multi-agent workflow.
     """
 
-    def __init__(self):
-        """Initialize the workflow with all agents."""
+    def __init__(self, use_mcp: bool = True):
+        """
+        Initialize the workflow with all agents.
+
+        Args:
+            use_mcp: If True, use MCP-enabled inventory agent
+        """
         self.supervisor = SupervisorAgent()
-        self.inventory_agent = InventoryAgent()
+
+        # Use MCP or traditional inventory agent
+        if use_mcp:
+            self.inventory_agent = InventoryAgentMCP()
+            logger.info("✅ Using MCP-enabled Inventory Agent")
+        else:
+            self.inventory_agent = InventoryAgent()
+            logger.info("Using traditional REST-based Inventory Agent")
 
         logger.info("Agent workflow initialized")
 
@@ -98,7 +112,9 @@ class AgentWorkflow:
         if state["actions_taken"]:
             logger.info(f"  Actions Taken ({len(state['actions_taken'])}):")
             for action in state["actions_taken"]:
-                logger.info(f"    • {action.get('action', 'unknown')}: {action.get('result', 'N/A')}")
+                logger.info(
+                    f"    • {action.get('action', 'unknown')}: {action.get('result', 'N/A')}"
+                )
 
         if state["should_escalate"]:
             logger.warning("  !!!  ESCALATION REQUIRED  !!!")
