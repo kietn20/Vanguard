@@ -1,5 +1,13 @@
-from typing import TypedDict, Optional, List, Dict, Any
+"""
+Agent state definition for LangGraph workflow.
+
+This state flows through all nodes in the graph,
+being updated at each step.
+"""
+
+import operator
 from enum import Enum
+from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 
 class EventType(str, Enum):
@@ -21,11 +29,15 @@ class Severity(str, Enum):
 # State definitions for the agent workflow. Each node in the graph can read and update this state.
 class AgentState(TypedDict):
     """
-    State that flows through the agent workflow.
+    State that flows through the LangGraph workflow.
 
     This is the "working memory" of the agent system.
-    Each agent can read from and write to this state.
+    Each node in the graph can read from and write to this state.
+
+    Fields with Annotated[List, operator.add] will accumulate values
+    instead of being overwritten (e.g., recommended_actions).
     """
+
     # input: The factory event that triggered this workflow
     event_id: str
     event_type: EventType
@@ -41,14 +53,14 @@ class AgentState(TypedDict):
 
     # agent analysis
     analysis: str  # Supervisor's analysis of the event
-    recommended_actions: List[str]  # Actions the agent recommends
 
-    # inventory checks
-    required_parts: List[str]  # Parts needed for this event
+    # lists that accumulate (using operator.add reducer)
+    recommended_actions: Annotated[List[str], operator.add]
+    required_parts: Annotated[List[str], operator.add]
+    actions_taken: Annotated[List[Dict[str, Any]], operator.add]
+
+    # dictionaries that get updated
     parts_available: Dict[str, bool]  # Which required parts are in stock
-
-    # actions taken
-    actions_taken: List[Dict[str, Any]]  # Log of actions performed
 
     # final decision
     final_decision: str  # Summary of what was decided

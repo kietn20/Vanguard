@@ -1,5 +1,5 @@
 """
-Kafka consumer that feeds events to the agent workflow.
+Kafka consumer that feeds events to the LangGraph workflow.
 """
 
 import json
@@ -8,14 +8,13 @@ import os
 import signal
 import sys
 
-from agents.workflow import AgentWorkflow
+from agents.workflow_langgraph import LangGraphWorkflow
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from metrics.agent_metrics import (
     active_agents,
     event_processing_duration,
     events_processed_total,
-    track_processing_time,
 )
 from prometheus_client import start_http_server
 
@@ -24,10 +23,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# check which workflow to use
+USE_LANGGRAPH = os.getenv("USE_LANGGRAPH", "true").lower() == "true"
+
+if USE_LANGGRAPH:
+    from agents.workflow_langgraph import LangGraphWorkflow
+    logger.info("🎯 Using LangGraph-based workflow")
+else:
+    from agents.workflow import AgentWorkflow
+    logger.info("⚠️  Using legacy manual routing workflow")
+
 
 class AgentKafkaConsumer:
     """
-    Kafka consumer for the AI agent system.
+    Kafka consumer for the AI agent system (now with LangGraph).
     """
 
     def __init__(
@@ -36,7 +45,13 @@ class AgentKafkaConsumer:
         self.bootstrap_servers = bootstrap_servers
         self.topic = topic
         self.consumer = None
-        self.workflow = AgentWorkflow()
+
+        # choose workflow based on env var
+        if USE_LANGGRAPH:
+            self.workflow = LangGraphWorkflow()
+        else:
+            self.workflow = AgentWorkflow()
+
         self.running = False
 
         # set active agents gauge
@@ -52,7 +67,10 @@ class AgentKafkaConsumer:
 
     def start(self):
         logger.info("=" * 60)
-        logger.info("VANGUARD AI AGENT SYSTEM STARTING")
+        if USE_LANGGRAPH:
+            logger.info("VANGUARD AI AGENT SYSTEM STARTING (LangGraph)")
+        else:
+            logger.info("VANGUARD AI AGENT SYSTEM STARTING (Legacy)")
         logger.info("=" * 60)
         logger.info(f"Kafka Broker: {self.bootstrap_servers}")
         logger.info(f"Topic: {self.topic}")
@@ -81,23 +99,23 @@ class AgentKafkaConsumer:
                 try:
                     event = message.value
 
-                    # track event in metrics
+                    # Track event in metrics
                     event_type = event.get("event_type", "UNKNOWN")
                     severity = event.get("severity", "UNKNOWN")
 
-                    # increment event counter
+                    # Increment event counter
                     events_processed_total.labels(
                         event_type=event_type, severity=severity
                     ).inc()
 
-                    # process with timing
+                    # Process with LangGraph workflow
                     import time
 
                     start_time = time.time()
 
                     state = self.workflow.process_event(event)
 
-                    # record processing duration
+                    # Record processing duration
                     duration = time.time() - start_time
                     event_processing_duration.labels(event_type=event_type).observe(
                         duration
