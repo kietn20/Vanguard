@@ -8,34 +8,33 @@ This provides REST and WebSocket endpoints to:
 - Monitor system health
 """
 
-import logging
 import asyncio
+import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import List, Optional
 
-from fastapi import (
-    FastAPI,
-    HTTPException,
-    WebSocket,
-    WebSocketDisconnect,
-    BackgroundTasks,
-    Query,
-)
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from datetime import datetime
-
+from agents.workflow_langgraph import LangGraphWorkflow
+from api.job_manager import Job, job_manager
 from api.models import (
-    WorkflowTriggerRequest,
+    HealthResponse,
+    StatsResponse,
     WorkflowResponse,
     WorkflowResult,
     WorkflowStatus,
     WorkflowStreamUpdate,
-    HealthResponse,
-    StatsResponse,
+    WorkflowTriggerRequest,
 )
-from api.job_manager import job_manager, Job
-from agents.workflow_langgraph import LangGraphWorkflow
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -327,6 +326,119 @@ async def websocket_workflow_stream(websocket: WebSocket, job_id: str):
         logger.error(f"WebSocket error: {e}", exc_info=True)
         try:
             await websocket.send_json({"error": str(e)})
+        except:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except:
+            pass
+
+
+@app.websocket("/ws/workflows/stream")
+async def websocket_workflow_stream_live(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time workflow streaming.
+
+    Client sends event data, and receives streaming updates
+    as each node in the graph executes.
+
+    Usage:
+        1. Connect to ws://localhost:8000/ws/workflows/stream
+        2. Send JSON event data
+        3. Receive streaming updates as workflow executes
+    """
+    await websocket.accept()
+
+    try:
+        logger.info("WebSocket connected for live streaming")
+
+        # Wait for event data from client
+        data = await websocket.receive_json()
+
+        # Validate and create event
+        try:
+            request = WorkflowTriggerRequest(**data)
+        except Exception as e:
+            await websocket.send_json(
+                {"type": "error", "message": f"Invalid request: {e}"}
+            )
+            await websocket.close()
+            return
+
+        # Create event
+        event = {
+            "event_id": f"evt-ws-{datetime.utcnow().timestamp()}",
+            "event_type": request.event_type.value,
+            "machine_id": request.machine_id,
+            "severity": request.severity.value,
+            "description": request.description,
+            "timestamp": datetime.utcnow().isoformat(),
+            "metadata": request.metadata,
+        }
+
+        # Create job
+        job_id = await job_manager.create_job(event)
+
+        # Send job created notification
+        await websocket.send_json(
+            {
+                "type": "started",
+                "job_id": job_id,
+                "event_id": event["event_id"],
+                "message": "Workflow execution started",
+            }
+        )
+
+        # Update status to running
+        await job_manager.update_job_status(job_id, WorkflowStatus.RUNNING)
+
+        try:
+            # Stream workflow execution
+            for node_name, state_update in workflow.stream_event(event):
+                # Send update to client
+                update = WorkflowStreamUpdate(
+                    job_id=job_id,
+                    node_name=node_name,
+                    timestamp=datetime.utcnow(),
+                    state_updates=state_update,
+                )
+
+                await websocket.send_json({"type": "update", "data": update.dict()})
+
+                logger.info(f"[{job_id}] Streamed update from node: {node_name}")
+
+            # Get final state
+            job = await job_manager.get_job(job_id)
+            if job and job.result:
+                await job_manager.update_job_status(
+                    job_id, WorkflowStatus.COMPLETED, result=job.result
+                )
+
+                # Send completion
+                await websocket.send_json(
+                    {
+                        "type": "completed",
+                        "job_id": job_id,
+                        "result": job.to_result().dict(),
+                    }
+                )
+
+        except Exception as e:
+            logger.error(f"Workflow execution error: {e}", exc_info=True)
+            await job_manager.update_job_status(
+                job_id, WorkflowStatus.FAILED, error=str(e)
+            )
+            await websocket.send_json(
+                {"type": "error", "job_id": job_id, "message": str(e)}
+            )
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}", exc_info=True)
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
         except:
             pass
     finally:

@@ -160,6 +160,52 @@ services:
     depends_on:
       - prometheus
 
+
+  # FastAPI Gateway
+  api-gateway:
+    build:
+      context: ./brain
+      dockerfile: Dockerfile
+    container_name: vanguard-api
+    ports:
+      - "8000:8000"  # API port
+      - "8001:8001"  # Metrics port
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      KAFKA_TOPIC: factory_events
+      INVENTORY_MCP_URL: http://inventory-service:8082/mcp
+      GUARDRAIL_MCP_URL: http://guardrail-service:8083/mcp
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+    depends_on:
+      kafka:
+        condition: service_healthy
+      inventory-service:
+        condition: service_started
+      guardrail-service:
+        condition: service_started
+    command: python run_api.py
+
+  # Keep the Kafka consumer separate (optional)
+  ai-agents-consumer:
+    build:
+      context: ./brain
+      dockerfile: Dockerfile
+    container_name: vanguard-agents-consumer
+    ports:
+      - "8002:8000"  # Metrics on different port
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+      KAFKA_TOPIC: factory_events
+      INVENTORY_MCP_URL: http://inventory-service:8082/mcp
+      GUARDRAIL_MCP_URL: http://guardrail-service:8083/mcp
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: python consumer.py
+
 volumes:
   postgres-data:
   prometheus-data:

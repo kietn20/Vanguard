@@ -1,5 +1,5 @@
-# AI Agent system container
-FROM python:3.12-slim
+# Multi-stage build for FastAPI + Kafka consumer
+FROM python:3.12-slim AS base
 
 # Install poetry
 RUN pip install --no-cache-dir poetry==2.2.1
@@ -22,5 +22,12 @@ RUN useradd -m -u 1000 vanguard && \
 
 USER vanguard
 
-# Run the agent consumer
-CMD ["python", "consumer.py"]
+# Expose both API and metrics ports
+EXPOSE 8000 8001
+
+# Health check for API
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+
+# Default command (can be overridden)
+CMD ["python", "run_api.py"]
