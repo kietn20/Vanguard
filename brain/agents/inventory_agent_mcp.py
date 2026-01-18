@@ -7,17 +7,8 @@ discover and call inventory service tools.
 
 import asyncio
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
-from agents.state import AgentState
-from tools.inventory_tools_mcp import (
-    get_part_by_number_mcp,
-    check_availability_mcp,
-    get_low_stock_parts_mcp,
-    discover_inventory_tools,
-    MCPError,
-)
-from tools.guardrail_client import validate_action, GuardrailError
 from metrics.agent_metrics import (
     actions_taken_total,
     guardrail_validations_total,
@@ -25,6 +16,18 @@ from metrics.agent_metrics import (
     parts_awaiting_approval,
     track_decision_time,
 )
+from tools.guardrail_client import GuardrailError, validate_action
+from tools.guardrail_client_mcp import MCPError as GuardrailMCPError
+from tools.guardrail_client_mcp import validate_action_mcp
+from tools.inventory_tools_mcp import (
+    MCPError,
+    check_availability_mcp,
+    discover_inventory_tools,
+    get_low_stock_parts_mcp,
+    get_part_by_number_mcp,
+)
+
+from agents.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +197,117 @@ class InventoryAgentMCP:
 
         except MCPError as e:
             logger.error(f"[{self.name}] MCP Error checking low stock: {e}")
+
+    async def _attempt_reserve_part(
+        self, state: AgentState, part_number: str, part_name: str
+    ) -> None:
+        """Attempt to reserve a part using MCP for both inventory and guardrails."""
+        try:
+            event_id = state.get("event_id", "")
+            machine_id = state.get("machine_id", "")
+            reason = f"Reserved for {machine_id} repair (Event: {state['event_type']})"
+
+            logger.info(
+                f"   Attempting to reserve {part_name} with MCP guardrail validation..."
+            )
+
+            # Validate with Guardrail Service via MCP
+            validation = await validate_action_mcp(
+                action_type="REMOVE",
+                part_number=part_number,
+                quantity=1,
+                reason=reason,
+                event_id=event_id,
+                agent_id="inventory-agent-mcp",
+            )
+
+            if validation.approved:
+                guardrail_validations_total.labels(
+                    action_type="REMOVE", result="approved"
+                ).inc()
+
+                logger.info(
+                    f"   ✅ Guardrail (MCP) APPROVED reservation of {part_name}"
+                )
+
+                # Remove stock via MCP
+                from tools.inventory_tools_mcp import remove_stock_mcp
+
+                transaction = await remove_stock_mcp(
+                    part_number=part_number,
+                    quantity=1,
+                    reason=reason,
+                    event_id=event_id,
+                )
+
+                logger.info(f"  ✅ Successfully reserved {part_name} via MCP")
+
+                state["actions_taken"].append(
+                    {
+                        "action": "reserve_part_mcp",
+                        "part": part_number,
+                        "result": "Reserved 1 unit",
+                        "transaction_id": transaction.get("transaction_id"),
+                        "guardrail_validated": True,
+                        "protocol": "MCP",
+                    }
+                )
+
+                actions_taken_total.labels(
+                    action_type="reserve_part_mcp", result="success"
+                ).inc()
+
+            elif validation.requires_human_approval:
+                guardrail_validations_total.labels(
+                    action_type="REMOVE", result="requires_approval"
+                ).inc()
+
+                logger.warning(
+                    f"  👤 Guardrail (MCP) requires HUMAN APPROVAL for {part_name}"
+                )
+                logger.warning(f"     Reason: {validation.decision}")
+
+                state["human_approval_needed"] = True
+                state["should_escalate"] = True
+
+                state["recommended_actions"].append(
+                    f"Human approval required to reserve {part_name}: {validation.decision}"
+                )
+
+                state["actions_taken"].append(
+                    {
+                        "action": "reserve_part_mcp",
+                        "part": part_number,
+                        "result": "Pending human approval",
+                        "guardrail_decision": validation.decision,
+                        "warnings": validation.warnings,
+                        "protocol": "MCP",
+                    }
+                )
+
+                parts_awaiting_approval.inc()
+
+        except (MCPError, GuardrailMCPError) as e:
+            guardrail_validations_total.labels(
+                action_type="REMOVE", result="rejected"
+            ).inc()
+
+            logger.error(f"  ❌ MCP validation/execution failed for {part_name}")
+            logger.error(f"     Reason: {e}")
+
+            state["actions_taken"].append(
+                {
+                    "action": "reserve_part_mcp",
+                    "part": part_number,
+                    "result": "Failed",
+                    "error": str(e),
+                    "protocol": "MCP",
+                }
+            )
+
+            actions_taken_total.labels(
+                action_type="reserve_part_mcp", result="failed"
+            ).inc()
 
     def _generate_decision(self, state: AgentState) -> None:
         """Generate final decision (same logic as before)."""

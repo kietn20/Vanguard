@@ -124,3 +124,64 @@ async def discover_inventory_tools() -> List[str]:
         logger.info(f"  • {tool.name}: {tool.description}")
 
     return tool_names
+
+
+async def remove_stock_mcp(
+    part_number: str, quantity: int, reason: str, event_id: Optional[str] = None
+) -> dict:
+    """
+    Remove stock from inventory using MCP.
+
+    Args:
+        part_number: Part to remove stock from
+        quantity: Amount to remove
+        reason: Reason for removal
+        event_id: Optional event ID for traceability
+
+    Returns:
+        Transaction details
+    """
+    client = await get_mcp_client()
+
+    arguments = {"part_number": part_number, "quantity": quantity, "reason": reason}
+
+    if event_id:
+        arguments["event_id"] = event_id
+
+    result = await client.call_tool("remove_stock", arguments)
+    return result
+
+
+async def add_stock_mcp(part_number: str, quantity: int, reason: str) -> dict:
+    """
+    Add stock to inventory using MCP.
+
+    Args:
+        part_number: Part to add stock to
+        quantity: Amount to add
+        reason: Reason for addition
+
+    Returns:
+        Transaction details
+    """
+    client = await get_mcp_client()
+
+    result = await client.call_tool(
+        "add_stock",
+        {"part_number": part_number, "quantity": quantity, "reason": reason},
+    )
+
+    return result
+
+
+async def get_all_parts_mcp() -> List[dict]:
+    """
+    Get all parts in inventory using MCP.
+
+    Returns:
+        List of all parts
+    """
+    client = await get_mcp_client()
+
+    result = await client.call_tool("get_all_parts", {})
+    return result.get("parts", [])
