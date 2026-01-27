@@ -1,6 +1,6 @@
 # Project Vanguard
 
-> An autonomous, event-driven multi-agent system for industrial factory orchestration
+> An autonomous, event-driven AI multi-agent system for industrial factory orchestration
 
 <div align="center">
 
